@@ -10,10 +10,12 @@ def central(stencilpoints, derivative):
     A = x**e
     b = np.zeros(2*start+1)
     b[derivative] = np.math.factorial(derivative)  
-    return solve(A,b), stencilpoints+1-derivative
+    Accuracy = stencilpoints + 1 - derivative
+
+    return solve(A,b), Accuracy
 
 
-def forward_backward(stencilpoints, derivative, forward=1):
+def forward_backward(stencilpoints, derivative, forward=True):
     s = stencilpoints
     x = np.arange(s)
     x = x[None,:]
@@ -21,10 +23,12 @@ def forward_backward(stencilpoints, derivative, forward=1):
     A = x**e
     b = np.zeros(s)
     b[derivative] = np.math.factorial(derivative)
-    if forward == 1:
-        return solve(A,b), stencilpoints-derivative 
-    elif forward == 0:
-        return np.flip(solve(A,b)), stencilpoints-derivative
+    Accuracy = stencilpoints - derivative
+
+    if forward == True:
+        return solve(A,b), Accuracy
+    elif forward == False:
+        return -np.flip(solve(A,b)), Accuracy
 
 
 def mixed_stencils(back, forth, derivative):
