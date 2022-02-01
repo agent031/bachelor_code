@@ -1,7 +1,8 @@
 import numpy as np
 from numpy.linalg import solve, inv
+import numba
 
-
+#@numba.njit
 def central(stencilpoints, derivative):
     start = int((stencilpoints - 1) * 0.5)
     x = np.arange(-start,start + 1)
@@ -14,7 +15,7 @@ def central(stencilpoints, derivative):
 
     return solve(A,b), Accuracy
 
-
+#@numba.njit
 def forward_backward(stencilpoints, derivative, forward=True):
     s = stencilpoints
     x = np.arange(s)
@@ -30,7 +31,7 @@ def forward_backward(stencilpoints, derivative, forward=True):
     elif forward == False:
         return -np.flip(solve(A,b)), Accuracy
 
-
+#@numba.njit
 def mixed_stencils(back, forth, derivative):
     b = back
     f = forth
