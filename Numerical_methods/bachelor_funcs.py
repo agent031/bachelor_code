@@ -37,7 +37,7 @@ r_out = 1e4 # AU
 r = r_in
 r_list = [r]
 while r < r_out:
-    Δr = np.sqrt(r)
+    Δr = 1e-1 * np.sqrt(r)
     r = r + Δr
     r_list.append(r)
 r_array = np.asarray(r_list)    
@@ -45,7 +45,7 @@ r_array = np.asarray(r_list)
 
 # Making A-matrix with 1. derivative irregular gridpoints 
 N = len(r_array)
-s = 3
+s = 4
 
 i1 = 0
 i2 = s
@@ -62,5 +62,5 @@ for i in range(N):
 first_dev_matrix = A.copy()
 
 def get_1_dev_irr(r):
-    return r @ first_dev_matrix
+    return first_dev_matrix @ r
 
