@@ -13,7 +13,7 @@ def stencil_calc(s, d):
     return solve(A, b)
 
 
-#@numba.njit
+
 def A_matrix_regular(N, s, derivative):
     i1 = 0
     i2 = s

@@ -4,6 +4,7 @@ import numba
 
 from matrix_calculator import A_matrix
 from scheme_calculator import forward_backward, central
+from ODE_schemes import stencil_calc
 
 
 # Numerical calculation of 1. derivative with equal gridspacing
@@ -35,8 +36,31 @@ r_in = 0.01 # AU
 r_out = 1e4 # AU 
 r = r_in
 r_list = [r]
-while r < 1e4:
+while r < r_out:
     Δr = np.sqrt(r)
     r = r + Δr
     r_list.append(r)
 r_array = np.asarray(r_list)    
+
+
+# Making A-matrix with 1. derivative irregular gridpoints 
+N = len(r_array)
+s = 3
+
+i1 = 0
+i2 = s
+A = np.zeros((N, N))
+for i in range(N):
+    if abs(i1 - i) >= s/2 and i2 < N:
+        i1 += 1
+        i2 += 1
+
+    stencil = r_array[i1:i2] - r_array[i]
+    coeff = stencil_calc(stencil, 1)
+    A[i, i1:i2] = coeff
+
+first_dev_matrix = A.copy()
+
+def get_1_dev_irr(r):
+    return r @ first_dev_matrix
+
