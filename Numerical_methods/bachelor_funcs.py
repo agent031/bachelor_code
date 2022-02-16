@@ -1,10 +1,20 @@
 import numpy as np
 import astropy.units as u
+from scipy.special import iv
 import numba
 
 from matrix_calculator import A_matrix
 from scheme_calculator import forward_backward, central
 from ODE_schemes import stencil_calc
+
+
+def analytic_green(x, τ):
+    return (np.pi * τ)**(-1) * x**(-1/4) * np.exp(- (1 + x**2) / τ) * iv(1/4, 2*x / τ)
+    
+# https://docs.scipy.org/doc/scipy/reference/special.html
+# Different kinds of bessel functions were tried - "Modified Bessel function of order 1." is the working one with the order sat to 1/4
+# (Not including pi in the first part of the soultion gives the same scale on the y-axis as Armitage)
+
 
 
 # Numerical calculation of 1. derivative with equal gridspacing
@@ -60,6 +70,7 @@ for i in range(N):
     A[i, i1:i2] = coeff
 
 first_dev_matrix = A.copy()
+
 
 def get_1_dev_irr(r):
     return first_dev_matrix @ r
