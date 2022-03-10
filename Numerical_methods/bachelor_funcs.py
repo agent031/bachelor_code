@@ -1,12 +1,12 @@
 import numpy as np
 import astropy.units as u
 from scipy.special import iv
+from scipy.sparse import csr_matrix
 import numba
 
 from matrix_calculator import A_matrix
 from scheme_calculator import forward_backward, central
 from ODE_schemes import stencil_calc
-
 
 def analytic_green(x, τ):
     return (np.pi * τ)**(-1) * x**(-1/4) * np.exp(- (1 + x**2) / τ) * iv(1/4, 2*x / τ)
@@ -46,8 +46,12 @@ r_in = 0.01 # AU
 r_out = 1e4 # AU 
 r = r_in
 r_list = [r]
+r_sensitive = 0.5e-1
 while r < r_out:
-    Δr = 1e-1 * np.sqrt(r)
+    if r <= r_sensitive:
+        Δr = 5e-3 * np.sqrt(r)
+    else: 
+        Δr = 5e-2 * np.sqrt(r)
     r = r + Δr
     r_list.append(r)
 r_array = np.asarray(r_list)    
@@ -74,4 +78,37 @@ first_dev_matrix = A.copy()
 
 def get_1_dev_irr(r):
     return first_dev_matrix @ r
+
+
+#Making A-matrix and r array for ghost points
+Δr = np.diff(r_array)
+r_ghost = np.concatenate((np.array([r_array[0] - Δr[0]]), r_array, np.array([r_array[-1] + Δr[-1]])))
+r_ghost
+
+N = len(r_ghost)
+s = 3
+
+i1 = 0
+i2 = s
+A_ghost = np.zeros((N, N))
+for i in range(N):
+    if abs(i1 - i) >= s/2 and i2 < N:
+        i1 += 1
+        i2 += 1
+
+    stencil = r_ghost[i1:i2] - r_ghost[i]
+    coeff = stencil_calc(stencil, 1)
+    A_ghost[i, i1:i2] = coeff
+A_ghost[0] = 0
+A_ghost[0, 0] = 1
+A_ghost[-1] = 0
+A_ghost[-1, -1] = 1
+
+
+A_ghost[1] = 0
+A_ghost[1, 0 : 3] = np.array([-0.5, 0 , 0.5]) / Δr[0]
+A_ghost[-2] = 0
+A_ghost[-2, -4: -1] = np.array([-0.5, 0 , 0.5]) / Δr[-1]
+
+sA_ghost = csr_matrix(A_ghost.copy())
 
