@@ -46,12 +46,12 @@ r_in = 0.01 # AU
 r_out = 1e4 # AU 
 r = r_in
 r_list = [r]
-r_sensitive = 0.5e-1
+r_sensitive = 5e-1
 while r < r_out:
     if r <= r_sensitive:
-        Δr = 5e-3 * np.sqrt(r)
+        Δr = 5e-4 * np.sqrt(r)
     else: 
-        Δr = 5e-2 * np.sqrt(r)
+        Δr = 5e-1 * np.sqrt(r)
     r = r + Δr
     r_list.append(r)
 r_array = np.asarray(r_list)    
@@ -59,7 +59,7 @@ r_array = np.asarray(r_list)
 
 # Making A-matrix with 1. derivative irregular gridpoints 
 N = len(r_array)
-s = 4
+s = 3
 
 i1 = 0
 i2 = s
@@ -112,3 +112,9 @@ A_ghost[-2, -4: -1] = np.array([-0.5, 0 , 0.5]) / Δr[-1]
 
 sA_ghost = csr_matrix(A_ghost.copy())
 
+
+
+#### Presets for plotting ####
+
+
+color_use = ['orangered', 'cornflowerblue', 'tab:orange', 'seagreen', 'blueviolet', 'olive']
