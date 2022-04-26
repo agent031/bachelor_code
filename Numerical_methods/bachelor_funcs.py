@@ -1,5 +1,6 @@
 import numpy as np
 import astropy.units as u
+from astropy.constants import c, k_B, M_sun, G, m_p, sigma_sb, m_p
 from scipy.special import iv
 from scipy.sparse import csr_matrix
 import numba
@@ -41,80 +42,12 @@ def Σ_initial(r, Σ_1au = 1.7e4 * u.g * u.cm**-2, r_cut = 30 * u.au):
     return Σ_1au * (r / (1 * u.au))**(-3/2) * np.exp(- r / r_cut)  
 
 
-# Defining array with specific gridspacing:
-r_in = 0.01 # AU
-r_out = 1e4 # AU 
-r = r_in
-r_list = [r]
-r_sensitive = 5e-1
-while r < r_out:
-    if r <= r_sensitive:
-        Δr = 5e-4 * np.sqrt(r)
-    else: 
-        Δr = 5e-1 * np.sqrt(r)
-    r = r + Δr
-    r_list.append(r)
-r_array = np.asarray(r_list)    
-
-
-# Making A-matrix with 1. derivative irregular gridpoints 
-N = len(r_array)
-s = 3
-
-i1 = 0
-i2 = s
-A = np.zeros((N, N))
-for i in range(N):
-    if abs(i1 - i) >= s/2 and i2 < N:
-        i1 += 1
-        i2 += 1
-
-    stencil = r_array[i1:i2] - r_array[i]
-    coeff = stencil_calc(stencil, 1)
-    A[i, i1:i2] = coeff
-
-first_dev_matrix = A.copy()
-
-
-def get_1_dev_irr(r):
-    return first_dev_matrix @ r
-
-
-#Making A-matrix and r array for ghost points
-Δr = np.diff(r_array)
-r_ghost = np.concatenate((np.array([r_array[0] - Δr[0]]), r_array, np.array([r_array[-1] + Δr[-1]])))
-r_ghost
-
-N = len(r_ghost)
-s = 3
-
-i1 = 0
-i2 = s
-A_ghost = np.zeros((N, N))
-for i in range(N):
-    if abs(i1 - i) >= s/2 and i2 < N:
-        i1 += 1
-        i2 += 1
-
-    stencil = r_ghost[i1:i2] - r_ghost[i]
-    coeff = stencil_calc(stencil, 1)
-    A_ghost[i, i1:i2] = coeff
-A_ghost[0] = 0
-A_ghost[0, 0] = 1
-A_ghost[-1] = 0
-A_ghost[-1, -1] = 1
-
-
-A_ghost[1] = 0
-A_ghost[1, 0 : 3] = np.array([-0.5, 0 , 0.5]) / Δr[0]
-A_ghost[-2] = 0
-A_ghost[-2, -4: -1] = np.array([-0.5, 0 , 0.5]) / Δr[-1]
-
-sA_ghost = csr_matrix(A_ghost.copy())
-
-
-
 #### Presets for plotting ####
-
-
 color_use = ['orangered', 'cornflowerblue', 'tab:orange', 'seagreen', 'blueviolet', 'olive']
+
+#### Functions to be used many times ####
+
+# The speed of sound
+def c_s2(T):
+    μ = 2.34
+    return ((k_B * T) / (μ * m_p)).decompose()
