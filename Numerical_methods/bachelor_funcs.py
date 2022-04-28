@@ -9,8 +9,7 @@ import string
 import numba
 
 from matrix_calculator import A_matrix
-from scheme_calculator import forward_backward, central
-from ODE_schemes import stencil_calc
+from unchanged_values import r, r_au, sD1_log, Ω, T_req
 
 def analytic_green(x, τ):
     return (np.pi * τ)**(-1) * x**(-1/4) * np.exp(- (1 + x**2) / τ) * iv(1/4, 2*x / τ)
@@ -20,30 +19,9 @@ def analytic_green(x, τ):
 # (Not including pi in the first part of the soultion gives the same scale on the y-axis as Armitage)
 
 
-
-# Numerical calculation of 1. derivative with equal gridspacing
-def get_first_dev(array, Δx):
-    array_dev = np.zeros_like(array)
-    array_dev[0] = forward_backward(3, 1, forward = True)[0] @ array[:3]
-    array_dev[-1] = forward_backward(3, 1, forward = False)[0] @ array[-3:]
-    array_dev[1: -1] = central(4, 1)[0] @ np.array([array[:-2], array[1: -1], array[2:]])
-    return array_dev / Δx
-
-
-# Numerical calculation of 1. derivative with increasing gridspacing
-def get_1_dev_new(array, Δx):
-    array_dev = np.zeros_like(array)
-    array_dev[0] = forward_backward(3, 1, forward = True)[0] @ (array[:3] / Δx[:3])
-    array_dev[-1] = forward_backward(3, 1, forward = False)[0] @ (array[-3:] / Δx[-3:])
-    array_dev[1: -1] = central(4, 1)[0] @ np.array([array[:-2], array[1: -1], array[2:]])  
-    #array_dev[1: -1] = central(4, 1)[0] @ np.array([array[:-2] / Δx[:-2] , array[1: -1] / Δx[1 : -1], array[2:] / Δx[2:]])  
-    return array_dev      
-
-
 # Initial condition for surface density
 def Σ_initial(r, Σ_1au = 1.7e4 * u.g * u.cm**-2, r_cut = 30 * u.au):
     return Σ_1au * (r / (1 * u.au))**(-3/2) * np.exp(- r / r_cut)  
-
 
 #### Presets for plotting ####
 color_use = ['orangered', 'cornflowerblue', 'tab:orange', 'seagreen', 'blueviolet', 'olive']
@@ -56,10 +34,15 @@ def c_s2(T):
     return ((k_B * T) / (μ * m_p)).decompose()
 
 
-
 #### Opacity functions ####
 ### Opacity ###
-def tau_R(T, Σ):
+#Defining transition region
+def kappa_trans(T):
+    a, b, c = [ 2.25044588e+00,  1.55595715e-02, -1.49115216e+03]
+    return a * (1 - np.tanh((T + c) * b))
+
+### Defining kappa function ###
+def kappa_R(T):
     if type(T) != np.ndarray:
         TT = (T.value).copy()
     else:
@@ -68,18 +51,13 @@ def tau_R(T, Σ):
 
     κ[TT < 150] = 4.5 * (TT[TT < 150] / 150)**2 
 
-    κ[np.where((TT >= 150) & (TT <= 1500))] = 4.5 
+    κ[TT >= 150] = kappa_trans(TT[TT >= 150])
 
-    #Defining transition region
-    def τ_R_func(T):
-        a, b, c = [ 2.25221001e+00,  1.39416392e-02, -1.72380082e+03]
-        return a * (1 - np.tanh((T + c) * b))
-    
-    Trans_i = np.where((TT >= 1500) & (TT <= 2000))
-    κ[Trans_i] = τ_R_func(TT[Trans_i])
-    
-    κ[TT > 2000] = 0 # Støvet fordamper og går i stykker 
+    return κ 
 
+
+def tau_R(T, Σ):
+    κ = kappa_R(T).copy()
     return κ * (Σ.to('g/cm2')).value / 2
 
 
@@ -89,6 +67,13 @@ def tau_P(τ_R):
     τ_P[τ_P != 0.5] = 2.4 * τ_P[τ_P != 0.5]
     return τ_P
 
+### F_rad Strond DW
+def F_rad_strongDW(T, Σ, α_rφ = 8e-5):
+    func_to_der = (r_au**2 * Σ * Ω * α_rφ * c_s2(T)).decompose()
+    F_rad = (-(r_au**(-2)) * (sD1_log @ func_to_der) * func_to_der.unit).decompose()
+    F_rad_nounit = F_rad.value
+    F_rad_nounit[F_rad_nounit <= 0] = 0
+    return F_rad_nounit * F_rad.unit
 
 
 #### Calculate Chi2 with "normal" function ####

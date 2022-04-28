@@ -5,7 +5,7 @@ from scipy.special import iv
 from scipy.sparse import csr_matrix
 from matrix_calculator import A_matrix
 
-N = 200
+N = 300
 r_in = 0.01 # AU
 r_out = 1e4 # AU 
 r = np.logspace(np.log(r_in), np.log(r_out), N, base = np.exp(1))
