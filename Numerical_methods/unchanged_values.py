@@ -5,6 +5,7 @@ from scipy.special import iv
 from scipy.sparse import csr_matrix
 from matrix_calculator import A_matrix
 
+
 N = 300
 r_in = 0.01 # AU
 r_out = 1e4 # AU 
@@ -25,3 +26,10 @@ sD1_log = csr_matrix(D1_log.copy())
 T_1au = 280 * u.K
 p = -1/2
 T_req = T_1au * (r)**p
+
+
+
+#### Presets for plotting ####
+color_use = ['orangered', 'cornflowerblue', 'tab:orange', 'seagreen', 'blueviolet', 'olive']
+
+

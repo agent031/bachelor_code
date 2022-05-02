@@ -7,6 +7,7 @@ from scipy.sparse import csr_matrix
 from iminuit import Minuit
 import string
 import numba
+import tqdm
 
 from matrix_calculator import A_matrix
 from unchanged_values import r, r_au, sD1_log, Ω, T_req
@@ -23,8 +24,6 @@ def analytic_green(x, τ):
 def Σ_initial(r, Σ_1au = 1.7e4 * u.g * u.cm**-2, r_cut = 30 * u.au):
     return Σ_1au * (r / (1 * u.au))**(-3/2) * np.exp(- r / r_cut)  
 
-#### Presets for plotting ####
-color_use = ['orangered', 'cornflowerblue', 'tab:orange', 'seagreen', 'blueviolet', 'olive']
 
 #### Functions to be used many times ####
 
@@ -48,9 +47,7 @@ def kappa_R(T):
     else:
         TT = T.copy()
     κ = np.zeros_like(TT)
-
     κ[TT < 150] = 4.5 * (TT[TT < 150] / 150)**2 
-
     κ[TT >= 150] = kappa_trans(TT[TT >= 150])
 
     return κ 
@@ -60,12 +57,15 @@ def tau_R(T, Σ):
     κ = kappa_R(T).copy()
     return κ * (Σ.to('g/cm2')).value / 2
 
-
 def tau_P(τ_R):
-    τ_P = τ_R.copy()
-    τ_P[2.4 * τ_P <= 0.5] = 0.5
-    τ_P[τ_P != 0.5] = 2.4 * τ_P[τ_P != 0.5]
+    τ_P = 2.4 * τ_R.copy()
+    τ_P = np.maximum(τ_P, 0.5)
     return τ_P
+
+### Combined Opacity function ###
+def opacity(T, Σ):
+    return (3/8 * tau_R(T, Σ) + (2 * tau_P(tau_R(T, Σ)))**(-1))**0.25
+
 
 ### F_rad Strond DW
 def F_rad_strongDW(T, Σ, α_rφ = 8e-5):
@@ -74,6 +74,29 @@ def F_rad_strongDW(T, Σ, α_rφ = 8e-5):
     F_rad_nounit = F_rad.value
     F_rad_nounit[F_rad_nounit <= 0] = 0
     return F_rad_nounit * F_rad.unit
+
+
+### The viscous temperature ###
+def T_vis_strongDW(T, Σ):
+    return (opacity(T, Σ) * ((0.5 * sigma_sb**(-1)) * F_rad_strongDW(T, Σ))**(0.25)).decompose()
+
+
+### Functions for guessing temperatue ###
+def guess_T(T, T_vis):
+    T_new4 = T_vis(T, Σ_initial(r_au)).value**4 + T_req.value**4
+    return T_new4**0.25 * u.K
+
+### Find initial temperature ###
+def find_temp(iterations, T0, T_vis):
+    T_list = [T0]
+    for i in tqdm.tqdm(range(iterations)):
+        T_old = T_list[-1]
+        T_new = guess_T(T_old, T_vis)
+        T_new = np.minimum(T_new, T_old * 1.01)
+        T_new = np.maximum(T_new, T_old * 0.99)
+        T_damp = (T_old + 2. * T_new)/3.
+        T_list.append(T_damp)
+    return T_list[-1]
 
 
 #### Calculate Chi2 with "normal" function ####
