@@ -18,7 +18,6 @@ r_log = np.log(r)
 D1_log = A_matrix(4, 1, N) / Δr_log
 sD1_log = csr_matrix(D1_log.copy())
 
-
 ### Keplerian velocity ###
 Ω = (np.sqrt((G * M_sun) / r_au**3)).decompose()
 
@@ -30,6 +29,6 @@ T_req = T_1au * (r)**p
 
 
 #### Presets for plotting ####
-color_use = ['orangered', 'cornflowerblue', 'tab:orange', 'seagreen', 'blueviolet', 'olive']
+color_use = ['orangered', 'cornflowerblue', 'seagreen', 'tab:orange', 'blueviolet', 'olive']
 
 

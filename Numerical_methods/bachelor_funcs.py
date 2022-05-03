@@ -37,7 +37,8 @@ def c_s2(T):
 ### Opacity ###
 #Defining transition region
 def kappa_trans(T):
-    a, b, c = [ 2.25018776e+00,  3.18833142e-02, -1.47474877e+03]
+    a1, b1, c1 = [ 2.25018776e+00,  3.18833142e-02, -1.47474877e+03]
+    a, b, c = [ 2.24998957e+00,  9.11150982e-02, -1.49796223e+03]
     return a * (1 - np.tanh((T + c) * b))
 
 ### Defining kappa function ###
@@ -49,7 +50,6 @@ def kappa_R(T):
     κ = np.zeros_like(TT)
     κ[TT < 150] = 4.5 * (TT[TT < 150] / 150)**2 
     κ[TT >= 150] = kappa_trans(TT[TT >= 150])
-
     return κ 
 
 
@@ -97,6 +97,42 @@ def find_temp(iterations, T0, T_vis):
         T_damp = (T_old + 2. * T_new)/3.
         T_list.append(T_damp)
     return T_list[-1]
+
+### Functions regarding the disc winds ###
+def ρ_cs_mid(Σ):
+    return ((2 * np.pi)**(-0.5) * Σ * Ω).decompose()
+
+
+def α_φz_func(Σ):
+    Σ_relation = 1e-5 * (Σ / Σ_initial(r_au))**(-0.66)
+    Σ_relation = np.minimum(Σ_relation, 1)
+    return Σ_relation
+
+### Cwς disc wind mass flux - energitics ###
+def C_we(T, Σ, α_φz, α_rφ = 8e-5):
+    def part1(Σ):
+        return 2 * ((r_au**3 * Ω * ρ_cs_mid(Σ))**(-1)).decompose()
+
+    def part2(Σ, T):
+        to_dev = (r_au**2 * Σ * α_rφ * c_s2(T)).decompose()
+        return (r_au**(-1) * (sD1_log @ to_dev) * to_dev.unit).decompose()
+
+    def part3(T, α_φz):
+        return ((2 * np.sqrt(c_s2(T))) / (r_au * Ω) * α_φz).decompose()
+    
+    product = (part1(Σ) * part2(Σ, T))
+    product = np.maximum(product, 0)
+
+    C_we = product  + part3(T, α_φz)
+    C_we = np.maximum(C_we, 0)
+
+    return C_we  
+
+
+### Cwς disc wind mass flux ###
+def C_w(T, Σ, α_φz, Cw0 = 1e-5):
+    C_W = np.minimum(Cw0, C_we(T, Σ, α_φz))
+    return C_W
 
 
 #### Calculate Chi2 with "normal" function ####
