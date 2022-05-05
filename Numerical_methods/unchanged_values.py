@@ -14,9 +14,14 @@ r_au = r * u.au
 r_log = np.log(r)
 Δr_log = r_log[1] - r_log[0]
 
-
 D1_log = A_matrix(4, 1, N) / Δr_log
 sD1_log = csr_matrix(D1_log.copy())
+
+### For boundary condition ###
+D1_log_ghost = A_matrix(4, 1, len(r_au) + 3)
+D1_log_ghost[0, :4] = [-3/2, 2, -1/2, 0]
+D1_log_ghost[-1, -4:] = [0, 1/2, -2, 3/2]
+sD1_log_ghost = csr_matrix(D1_log_ghost.copy() / Δr_log)
 
 ### Keplerian velocity ###
 Ω = (np.sqrt((G * M_sun) / r_au**3)).decompose()

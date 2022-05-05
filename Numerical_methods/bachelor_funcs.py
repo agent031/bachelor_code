@@ -10,7 +10,7 @@ import numba
 import tqdm
 
 from matrix_calculator import A_matrix
-from unchanged_values import r, r_au, sD1_log, Ω, T_req
+from unchanged_values import r, r_au, sD1_log, Ω, T_req, sD1_log_ghost
 
 def analytic_green(x, τ):
     return (np.pi * τ)**(-1) * x**(-1/4) * np.exp(- (1 + x**2) / τ) * iv(1/4, 2*x / τ)
@@ -67,7 +67,7 @@ def opacity(T, Σ):
     return (3/8 * tau_R(T, Σ) + (2 * tau_P(tau_R(T, Σ)))**(-1))**0.25
 
 
-### F_rad Strond DW
+### F_rad Strong DW ###
 def F_rad_strongDW(T, Σ, α_rφ = 8e-5):
     func_to_der = (r_au**2 * Σ * Ω * α_rφ * c_s2(T)).decompose()
     F_rad = (-(r_au**(-2)) * (sD1_log @ func_to_der) * func_to_der.unit).decompose()
@@ -75,27 +75,56 @@ def F_rad_strongDW(T, Σ, α_rφ = 8e-5):
     F_rad_nounit[F_rad_nounit <= 0] = 0
     return F_rad_nounit * F_rad.unit
 
+### F_rad Weak DW ###
+def F_rad_weakDW(T, Σ, α_φz, α_rφ = 8e-10, ε_rad = 0.9):
+    return ε_rad * (3/2 * Ω * Σ * α_rφ * c_s2(T) + r_au * Ω * α_φz * np.sqrt(c_s2(T)) / np.sqrt(2*np.pi) * Σ * Ω).to(('W/m2'))
 
 ### The viscous temperature ###
 def T_vis_strongDW(T, Σ):
     return (opacity(T, Σ) * ((0.5 * sigma_sb**(-1)) * F_rad_strongDW(T, Σ))**(0.25)).decompose()
 
+def T_vis_weakDW(T, Σ, α_φz):
+    return (opacity(T, Σ) * ((0.5 * sigma_sb**(-1)) * F_rad_weakDW(T, Σ, α_φz))**(0.25)).decompose()
+
 
 ### Functions for guessing temperatue ###
-def guess_T(T, T_vis):
-    T_new4 = T_vis(T, Σ_initial(r_au)).value**4 + T_req.value**4
-    return T_new4**0.25 * u.K
+def guess_T(T, Σ, T_vis, α_φz):
+    if T_vis == T_vis_strongDW:
+        T_new4 = T_vis(T, Σ)**4 + T_req**4
+    else:
+        T_new4 = T_vis(T, Σ, α_φz)**4 + T_req**4
+    return (T_new4**0.25).decompose() 
 
 ### Find initial temperature ###
-def find_temp(iterations, T0, T_vis):
+def find_temp(iterations, T0, Σ, T_vis, α_φz):
     T_list = [T0]
     for i in tqdm.tqdm(range(iterations)):
         T_old = T_list[-1]
-        T_new = guess_T(T_old, T_vis)
-        T_new = np.minimum(T_new, T_old * 1.01)
-        T_new = np.maximum(T_new, T_old * 0.99)
+        T_new = guess_T(T_old, Σ, T_vis, α_φz)
+        T_new = np.minimum(T_new, T_old * 1.001)
+        T_new = np.maximum(T_new, T_old * 0.999)
         T_damp = (T_old + 2. * T_new)/3.
         T_list.append(T_damp)
+    return T_list[-1]
+
+
+### Find temperature during time evolution ###
+def find_temp_timestep(T0, Σ, T_vis, pct_tol = 0.001, max_iterations = 100):
+    T_list = [T0]
+    count = 0 
+    while True:
+        T_old = T_list[-1]
+        T_new = guess_T(T_old, Σ, T_vis)
+        sweet_spot = len(np.where((T_new < T_old * (1 + pct_tol)) & (T_new > T_old * (1 - pct_tol)))[0])
+        if sweet_spot > (2/3) * len(T0) and count >= 10:
+            break        
+        T_new = np.minimum(T_new, T_old * 1.001)
+        T_new = np.maximum(T_new, T_old * 0.999)
+        T_damp = (T_old + 2. * T_new) / 3.
+        T_list.append(T_damp)
+        count += 1
+        if count == max_iterations:
+            break
     return T_list[-1]
 
 ### Functions regarding the disc winds ###
@@ -108,8 +137,8 @@ def α_φz_func(Σ):
     Σ_relation = np.minimum(Σ_relation, 1)
     return Σ_relation
 
-### Cwς disc wind mass flux - energitics ###
-def C_we(T, Σ, α_φz, α_rφ = 8e-5):
+### Cw disc wind mass flux - energitics ###
+def C_we_strongDW(T, Σ, α_φz, α_rφ = 8e-5):
     def part1(Σ):
         return 2 * ((r_au**3 * Ω * ρ_cs_mid(Σ))**(-1)).decompose()
 
@@ -121,7 +150,6 @@ def C_we(T, Σ, α_φz, α_rφ = 8e-5):
         return ((2 * np.sqrt(c_s2(T))) / (r_au * Ω) * α_φz).decompose()
     
     product = (part1(Σ) * part2(Σ, T))
-    product = np.maximum(product, 0)
 
     C_we = product  + part3(T, α_φz)
     C_we = np.maximum(C_we, 0)
@@ -129,10 +157,38 @@ def C_we(T, Σ, α_φz, α_rφ = 8e-5):
     return C_we  
 
 
-### Cwς disc wind mass flux ###
-def C_w(T, Σ, α_φz, Cw0 = 1e-5):
+### Cw disc wind mass flux ###
+def C_w(T, Σ, α_φz, C_we, Cw0 = 1e-5):
     C_W = np.minimum(Cw0, C_we(T, Σ, α_φz))
     return C_W
+
+
+#### Function for timesteps #### 
+def boundary_part(T, Σ, α_rφ = 8e-5):
+    to_dev = (r_au**2 * Σ * α_rφ * c_s2(T)).decompose()
+
+    ghost_i1 = to_dev[0]**2 / (to_dev[1])
+    ghost_i2 = to_dev[0]**2 / (to_dev[2])
+    ghost_f = to_dev[-1]**2 / (to_dev[-2])
+
+    to_dev_ghost = np.concatenate((np.array([ghost_i2.value, ghost_i1.value]), to_dev.value, np.array([ghost_f.value]))) * to_dev.unit
+
+    dev = ((sD1_log_ghost @ to_dev_ghost) * to_dev.unit).decompose()
+    return (r_au**(-1) * dev[2 : -1]).decompose()
+
+def part2(T, Σ, α_φz):
+    return (r_au**2 * α_φz * ρ_cs_mid(Σ) * np.sqrt(c_s2(T))).decompose() 
+
+def part3(T, Σ, α_φz, C_we):
+    return (C_w(T, Σ, α_φz, C_we) * ρ_cs_mid(Σ)).decompose()
+
+
+def Σ_timestep(T, Σ, Δt, α_φz, C_we):
+    sum = (2 / ( r_au * Ω) * ((boundary_part(T, Σ)) + part2(T, Σ, α_φz))).decompose()
+    dev2 = (r_au**(-2) * (sD1_log @ sum) * sum.unit).decompose()
+    time_step = (dev2 - part3(T, Σ, α_φz, C_we))
+
+    return (Σ + Δt * time_step).to('g/cm2')
 
 
 #### Calculate Chi2 with "normal" function ####
